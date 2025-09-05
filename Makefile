@@ -29,5 +29,6 @@ coverage:
 test: 
 	@go test -v -race ./pkg/helloworld
 
+
 install:
 	cp ./bin/$(BINARY_NAME) /usr/local/bin
