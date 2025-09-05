@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/eislab-cps/go-template/pkg/build"
+	"github.com/RasSved/D7024E_lab/pkg/build"
 	"github.com/spf13/cobra"
 )
 

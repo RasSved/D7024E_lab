@@ -124,7 +124,7 @@ To customize the project name, follow these steps:
 1. Create a new Git repo.
 
 2. **Edit `go.mod`** 
-   Change the module path from: `module github.com/eislab-cps/go-template` to your new project path.
+   Change the module path from: `module github.com/RasSved/D7024E_lab` to your new project path.
 
 3. **Update Import Paths**  
 Modify the import paths in the following files:
@@ -132,23 +132,23 @@ Modify the import paths in the following files:
 - `internal/cli/version.go`  
   Line 6:
   ```go
-  "github.com/eislab-cps/go-template/pkg/build"
+  "github.com/RasSved/D7024E_lab/pkg/build"
   ```
 
 - `internal/cli/talk.go`  
   Line 4:
   ```go
-  "github.com/eislab-cps/go-template/pkg/helloworld"
+  "github.com/RasSved/D7024E_lab/pkg/helloworld"
   ```
 
 - `cmd/main.go`  
   Lines 4–5:
   ```go
-  "github.com/eislab-cps/go-template/internal/cli"
-  "github.com/eislab-cps/go-template/pkg/build"
+  "github.com/RasSved/D7024E_lab/internal/cli"
+  "github.com/RasSved/D7024E_lab/pkg/build"
   ```
 
-Replace each instance of `github.com/eislab-cps/go-template` with your new module name.
+Replace each instance of `github.com/RasSved/D7024E_lab` with your new module name.
 
 4. Update Goreleaser
 Change the `binary` name to `helloworld` in the `.goreleaser.yml` file.
@@ -178,10 +178,10 @@ Take a look at these configuration files for CI/CD setup:
 **Note:**  
 The Goreleaser workflow can be used to automatically build and publish binaries on GitHub.  
 Click the **Draft a new release** button to create a new release.  
-Published releases will appear here: [GitHub Releases - go-template](https://github.com/eislab-cps/go-template/releases)
+Published releases will appear here: [GitHub Releases - RasSved/D7024E_lab](https://github.com/RasSved/D7024E_lab/releases)
 
 The Docker workflow will automatically build and publish a Docker image on GitHub.  
-See this page: [GitHub Packages - go-template](https://github.com/eislab-cps/go-template/pkgs/container/go-template)
+See this page: [GitHub Packages - RasSved/D7024E_lab](https://github.com/RasSved/D7024E_lab/pkgs/container/RasSved/D7024E_lab)
 
 ## Other tips
 - Run `go mod tidy` to clean up and verify dependencies.

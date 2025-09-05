@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"github.com/eislab-cps/go-template/pkg/helloworld"
+	"github.com/RasSved/D7024E_lab/pkg/helloworld"
 	"github.com/spf13/cobra"
 )
 

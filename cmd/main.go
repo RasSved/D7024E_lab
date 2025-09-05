@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/eislab-cps/go-template/internal/cli"
-	"github.com/eislab-cps/go-template/pkg/build"
+	"github.com/RasSved/D7024E_lab/internal/cli"
+	"github.com/RasSved/D7024E_lab/pkg/build"
 )
 
 var (
