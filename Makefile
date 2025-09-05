@@ -27,7 +27,7 @@ coverage:
 	./buildtools/codecov
 
 test: 
-	@cd pkg/helloworld; go test -v --race
+	@go test -v -race ./pkg/helloworld
 
 install:
 	cp ./bin/$(BINARY_NAME) /usr/local/bin
