@@ -1,0 +1,603 @@
+services:
+  node01:
+    image: kadlab:latest
+    hostname: node01
+    container_name: node01
+    environment:
+      - NODE_NAME=node01
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node02:
+    image: kadlab:latest
+    hostname: node02
+    container_name: node02
+    environment:
+      - NODE_NAME=node02
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node03:
+    image: kadlab:latest
+    hostname: node03
+    container_name: node03
+    environment:
+      - NODE_NAME=node03
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node04:
+    image: kadlab:latest
+    hostname: node04
+    container_name: node04
+    environment:
+      - NODE_NAME=node04
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node05:
+    image: kadlab:latest
+    hostname: node05
+    container_name: node05
+    environment:
+      - NODE_NAME=node05
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node06:
+    image: kadlab:latest
+    hostname: node06
+    container_name: node06
+    environment:
+      - NODE_NAME=node06
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node07:
+    image: kadlab:latest
+    hostname: node07
+    container_name: node07
+    environment:
+      - NODE_NAME=node07
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node08:
+    image: kadlab:latest
+    hostname: node08
+    container_name: node08
+    environment:
+      - NODE_NAME=node08
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node09:
+    image: kadlab:latest
+    hostname: node09
+    container_name: node09
+    environment:
+      - NODE_NAME=node09
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node10:
+    image: kadlab:latest
+    hostname: node10
+    container_name: node10
+    environment:
+      - NODE_NAME=node10
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node11:
+    image: kadlab:latest
+    hostname: node11
+    container_name: node11
+    environment:
+      - NODE_NAME=node11
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node12:
+    image: kadlab:latest
+    hostname: node12
+    container_name: node12
+    environment:
+      - NODE_NAME=node12
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node13:
+    image: kadlab:latest
+    hostname: node13
+    container_name: node13
+    environment:
+      - NODE_NAME=node13
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node14:
+    image: kadlab:latest
+    hostname: node14
+    container_name: node14
+    environment:
+      - NODE_NAME=node14
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node15:
+    image: kadlab:latest
+    hostname: node15
+    container_name: node15
+    environment:
+      - NODE_NAME=node15
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node16:
+    image: kadlab:latest
+    hostname: node16
+    container_name: node16
+    environment:
+      - NODE_NAME=node16
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node17:
+    image: kadlab:latest
+    hostname: node17
+    container_name: node17
+    environment:
+      - NODE_NAME=node17
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node18:
+    image: kadlab:latest
+    hostname: node18
+    container_name: node18
+    environment:
+      - NODE_NAME=node18
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node19:
+    image: kadlab:latest
+    hostname: node19
+    container_name: node19
+    environment:
+      - NODE_NAME=node19
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node20:
+    image: kadlab:latest
+    hostname: node20
+    container_name: node20
+    environment:
+      - NODE_NAME=node20
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node21:
+    image: kadlab:latest
+    hostname: node21
+    container_name: node21
+    environment:
+      - NODE_NAME=node21
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node22:
+    image: kadlab:latest
+    hostname: node22
+    container_name: node22
+    environment:
+      - NODE_NAME=node22
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node23:
+    image: kadlab:latest
+    hostname: node23
+    container_name: node23
+    environment:
+      - NODE_NAME=node23
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node24:
+    image: kadlab:latest
+    hostname: node24
+    container_name: node24
+    environment:
+      - NODE_NAME=node24
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node25:
+    image: kadlab:latest
+    hostname: node25
+    container_name: node25
+    environment:
+      - NODE_NAME=node25
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node26:
+    image: kadlab:latest
+    hostname: node26
+    container_name: node26
+    environment:
+      - NODE_NAME=node26
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node27:
+    image: kadlab:latest
+    hostname: node27
+    container_name: node27
+    environment:
+      - NODE_NAME=node27
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node28:
+    image: kadlab:latest
+    hostname: node28
+    container_name: node28
+    environment:
+      - NODE_NAME=node28
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node29:
+    image: kadlab:latest
+    hostname: node29
+    container_name: node29
+    environment:
+      - NODE_NAME=node29
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node30:
+    image: kadlab:latest
+    hostname: node30
+    container_name: node30
+    environment:
+      - NODE_NAME=node30
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node31:
+    image: kadlab:latest
+    hostname: node31
+    container_name: node31
+    environment:
+      - NODE_NAME=node31
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node32:
+    image: kadlab:latest
+    hostname: node32
+    container_name: node32
+    environment:
+      - NODE_NAME=node32
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node33:
+    image: kadlab:latest
+    hostname: node33
+    container_name: node33
+    environment:
+      - NODE_NAME=node33
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node34:
+    image: kadlab:latest
+    hostname: node34
+    container_name: node34
+    environment:
+      - NODE_NAME=node34
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node35:
+    image: kadlab:latest
+    hostname: node35
+    container_name: node35
+    environment:
+      - NODE_NAME=node35
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node36:
+    image: kadlab:latest
+    hostname: node36
+    container_name: node36
+    environment:
+      - NODE_NAME=node36
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node37:
+    image: kadlab:latest
+    hostname: node37
+    container_name: node37
+    environment:
+      - NODE_NAME=node37
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node38:
+    image: kadlab:latest
+    hostname: node38
+    container_name: node38
+    environment:
+      - NODE_NAME=node38
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node39:
+    image: kadlab:latest
+    hostname: node39
+    container_name: node39
+    environment:
+      - NODE_NAME=node39
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node40:
+    image: kadlab:latest
+    hostname: node40
+    container_name: node40
+    environment:
+      - NODE_NAME=node40
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node41:
+    image: kadlab:latest
+    hostname: node41
+    container_name: node41
+    environment:
+      - NODE_NAME=node41
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node42:
+    image: kadlab:latest
+    hostname: node42
+    container_name: node42
+    environment:
+      - NODE_NAME=node42
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node43:
+    image: kadlab:latest
+    hostname: node43
+    container_name: node43
+    environment:
+      - NODE_NAME=node43
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node44:
+    image: kadlab:latest
+    hostname: node44
+    container_name: node44
+    environment:
+      - NODE_NAME=node44
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node45:
+    image: kadlab:latest
+    hostname: node45
+    container_name: node45
+    environment:
+      - NODE_NAME=node45
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node46:
+    image: kadlab:latest
+    hostname: node46
+    container_name: node46
+    environment:
+      - NODE_NAME=node46
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node47:
+    image: kadlab:latest
+    hostname: node47
+    container_name: node47
+    environment:
+      - NODE_NAME=node47
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node48:
+    image: kadlab:latest
+    hostname: node48
+    container_name: node48
+    environment:
+      - NODE_NAME=node48
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node49:
+    image: kadlab:latest
+    hostname: node49
+    container_name: node49
+    environment:
+      - NODE_NAME=node49
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+  node50:
+    image: kadlab:latest
+    hostname: node50
+    container_name: node50
+    environment:
+      - NODE_NAME=node50
+      - PORT=9999
+      - AUTO_ACK=1
+    expose:
+      - "9999/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+networks:
+  kadnet:
