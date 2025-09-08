@@ -4,11 +4,10 @@ NODES="${1:-50}"
 OUT="${2:-docker-compose.nodes.yml}"
 
 cat > "$OUT" <<'YAML'
-version: "3.9"
 services:
 YAML
 
-for i in $(seq -f "%02g" 1 "$NODES"); do
+for i in $(seq -f "%02g" 1 "$NODES"); do # Loop for creating our 50 nodes
   name="node${i}"
   cat >> "$OUT" <<YAML
   ${name}:
