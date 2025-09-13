@@ -1,33 +1,19 @@
-# See https://docs.docker.com/compose/compose-file/ for information about what
-# commands you can use in this file.
-#
-# Note that you must use the `docker stack deploy` command, with any required
-# command line flags, in order to actually get any replicas started. That
-# command requires that a docker swarm is already running in order to function.
-
-version: "3"
+version: "3.8"
 services:
   kademliaNodes:
-    image: kadlab:latest # Make sure your Docker image has this name.
-#    stdin_open: true
-#    tty: true
+    image: kadlab:latest
     command: ["kadlab","node","--listen=:4000"]
+    # Publish UDP only if you want to reach from the host; not needed for in-cluster tests:
+    # ports:
+    #   - "4000:4000/udp"
     deploy:
       mode: replicated
-      replicas: 50  
-#        resources:
-#           limits:
-#              cpus: "0.1"
-#              memory: 50M
+      replicas: 1   # ignored by docker compose (non-swarm); used by swarm
       restart_policy:
         condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 10s
-#    ports:
-#      - "4000:80"
     networks:
       - kademlia_network
-      
+
 networks:
   kademlia_network:
+    driver: bridge

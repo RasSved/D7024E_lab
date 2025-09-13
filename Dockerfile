@@ -4,5 +4,5 @@ USER app
 WORKDIR /home/app
 
 COPY bin/kadlab /usr/local/bin/kadlab
-EXPOSE 4000
-CMD ["kadlab"]
+EXPOSE 4000/udp
+CMD ["kadlab", "node", "--listen=:4000"]
