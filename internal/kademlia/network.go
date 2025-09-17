@@ -7,6 +7,7 @@ import (
 	"sync"
 )
 
+// Network represents a Kademlia network node with IDP communication capabilities
 type Network struct {
 	nodeID       *KademliaID
 	address      string
@@ -18,13 +19,14 @@ type Network struct {
 	rpcCallbacks map[string]chan RPCResponse // For handling async responses
 }
 
+// RPCResponse represents a response from a remote procedure call
 type RPCResponse struct {
 	MessageType string
 	Payload     []byte
 	Error       error
 }
 
-// Return a Network instance that can handle messages
+// Listen creates and starts a Network instance listening on the specified IP and port
 func Listen(ip string, port int) *Network {
 	addrStr := net.JoinHostPort(ip, strconv.Itoa(port))
 
@@ -35,17 +37,19 @@ func Listen(ip string, port int) *Network {
 	}
 	log.Printf("Resolved UDP address: %s\n", udpAddr.String())
 
+	// Create UDP listener
 	conn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
 		log.Fatal("Error listening on UDP:", err)
 	}
 	log.Printf("Listening on %s\n", addrStr)
 
-	// Create node ID and contact
+	// Create node ID and contact info
 	nodeID := NewRandomKademliaID()
 	myContact := NewContact(nodeID, addrStr)
 	log.Printf("Node ID: %s, Contact: %+v\n", nodeID.String(), myContact)
 
+	// Initialize Network instance with all required components
 	network := &Network{
 		nodeID:       nodeID,
 		address:      addrStr,
@@ -55,15 +59,17 @@ func Listen(ip string, port int) *Network {
 		rpcCallbacks: make(map[string]chan RPCResponse),
 	}
 
-	// Start listening for incoming messages
+	// Start background listener for incoming messages
 	go network.listenLoop()
 
 	return network
 }
 
+// listenLoop continuously listens for incoming UDP messages
 func (network *Network) listenLoop() {
 	buffer := make([]byte, 8192) //8KB buffer
 	for {
+		// Read data from UDP connection
 		n, addr, err := network.conn.ReadFromUDP(buffer)
 		if err != nil {
 			log.Printf("Error reading from UDP: %v\n", err)
@@ -75,10 +81,9 @@ func (network *Network) listenLoop() {
 	}
 }
 
+// handleMessage processes incoming messages based on their type
 func (network *Network) handleMessage(data []byte, addr *net.UDPAddr) {
-
-	// Parse the message based on your protocol format
-	// Simple text based protocol for PING
+	// Simple text based protocol for PING(temporary implementation)
 	if string(data) == "PING" {
 		network.handlePing(addr)
 		return
@@ -88,8 +93,8 @@ func (network *Network) handleMessage(data []byte, addr *net.UDPAddr) {
 	log.Printf("Received unknown message: %s\n", string(data))
 }
 
+// handlePing processes PING requests and sends PONG responses
 func (network *Network) handlePing(addr *net.UDPAddr) {
-	// Send PONG response
 	response := []byte("PONG")
 	_, err := network.conn.WriteToUDP(response, addr)
 	if err != nil {
@@ -97,6 +102,7 @@ func (network *Network) handlePing(addr *net.UDPAddr) {
 	}
 }
 
+// SendPingMessage sends a PING message to the specified contact
 func (network *Network) SendPingMessage(contact *Contact) error {
 	// Resolve the target address
 	udpAddr, err := net.ResolveUDPAddr("udp", contact.Address)
@@ -104,7 +110,7 @@ func (network *Network) SendPingMessage(contact *Contact) error {
 		return err
 	}
 
-	// Send PING message
+	// Send PING message via UDP
 	_, err = network.conn.WriteToUDP([]byte("PING"), udpAddr)
 	return err
 }
