@@ -99,7 +99,7 @@ func (kademlia *Kademlia) iterativeLookupContact(target *Contact) []Contact {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		for _, peer := range batch {
 			p := peer // capture
-			ch, err := kademlia.network.SendFindContactMessage(&p, targetID)
+			ch, err := kademlia.network.SendFindContactMessageAsync(&p, targetID)
 			if err != nil {
 				// mark as queried anyway to avoid retry-looping the bad peer
 				queried[p.ID.String()] = true

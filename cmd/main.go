@@ -8,6 +8,7 @@ import (
 	"github.com/RasSved/D7024E_lab/internal/kademlia"
 )
 
+// Initialization finns i func Listen(ip string, port int) *Network { rad 63 i network.go
 func main() {
 	port := flag.String("port", "8000", "listen port")
 	bootstrap := flag.String("bootstrap", "", "bootstrap host:port")

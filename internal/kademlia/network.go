@@ -25,6 +25,7 @@ const (
 type PendingRequest struct {
 	Timestamp    time.Time
 	ResponseChan chan Message
+	resultChan   chan []Contact // For async requests
 	TargetID     *KademliaID
 }
 
@@ -223,12 +224,18 @@ func (network *Network) handleFindNodeResponse(msg Message, addr *net.UDPAddr) {
 	// 1. Check if this is a response to a pending request
 	network.pendingMutex.Lock()
 	if pendingReq, exists := network.pendingRequests[msg.RPCID.String()]; exists {
-		// Send response to waiting goroutine
-		pendingReq.ResponseChan <- msg
+		// Send the actual contacts to the result channel
+		select {
+		case pendingReq.resultChan <- msg.Nodes: // send contacts to async caller
+		default: // avoid blocking if channel full
+		}
+
+		// Cleanup
+		close(pendingReq.resultChan)
 		delete(network.pendingRequests, msg.RPCID.String())
 		network.pendingMutex.Unlock()
 
-		log.Printf("Found pending request for RPC ID %s - delivered response\n", msg.RPCID.String())
+		log.Printf("Delivered async response for RPC ID %s\n", msg.RPCID.String())
 	} else {
 		network.pendingMutex.Unlock()
 		// IF no pending request, still process nodes for routing table
@@ -276,7 +283,7 @@ func (network *Network) SendPingMessage(contact *Contact) error {
 }
 
 // SendFindContactMessage sends a FIND_NODE message to find contacts close to target ID
-func (network *Network) SendFindContactMessage(contact *Contact, targetID *KademliaID) (<-chan []Contact, error) {
+func (network *Network) SendFindContactMessage(contact *Contact, targetID *KademliaID) ([]Contact, error) {
 	// Generate 160-bit RPC ID
 	rpcID := NewRandomKademliaID()
 
@@ -339,19 +346,94 @@ func (network *Network) SendFindContactMessage(contact *Contact, targetID *Kadem
 	}
 }
 
+// SendFindContactMessageAsync sends a FIND_NODE message asynchronously and returns a channel for results
+func (network *Network) SendFindContactMessageAsync(contact *Contact, targetID *KademliaID) (<-chan []Contact, error) {
+	rpcID := NewRandomKademliaID()
+	resultChan := make(chan []Contact, 1)
+
+	//Store pending request
+	network.pendingMutex.Lock()
+	network.pendingRequests[rpcID.String()] = &PendingRequest{
+		Timestamp:    time.Now(),
+		ResponseChan: make(chan Message, 1),
+		TargetID:     targetID,
+		resultChan:   resultChan,
+	}
+	network.pendingMutex.Unlock()
+
+	//Create FIND_NODE message
+	msg := Message{
+		RPCID:  rpcID,
+		Type:   FIND_NODE,
+		Sender: network.RoutingTable.me,
+		Target: targetID,
+	}
+
+	//Serialize and send message
+	msgData, err := network.serializeMessage(msg)
+	if err != nil {
+		network.pendingMutex.Lock()
+		delete(network.pendingRequests, rpcID.String())
+		network.pendingMutex.Unlock()
+		close(resultChan)
+		return nil, err
+	}
+
+	udpAddr, err := net.ResolveUDPAddr("udp", contact.Address)
+	if err != nil {
+		network.pendingMutex.Lock()
+		delete(network.pendingRequests, rpcID.String())
+		network.pendingMutex.Unlock()
+		close(resultChan)
+		return nil, err
+	}
+
+	_, err = network.conn.WriteToUDP(msgData, udpAddr)
+	if err != nil {
+		network.pendingMutex.Lock()
+		delete(network.pendingRequests, rpcID.String())
+		network.pendingMutex.Unlock()
+		close(resultChan)
+		return nil, err
+	}
+	log.Printf("Sent FIND_NODE to %s for target %s (RPC ID: %s)\n", contact.Address, targetID.String(), rpcID.String())
+
+	//Start timeout goroutine
+	go network.startAsyncTimeout(rpcID.String(), resultChan)
+
+	return resultChan, nil
+
+}
+
+// startAsyncTimeout handles timeout for async requests
+func (network *Network) startAsyncTimeout(rpcID string, resultChan chan []Contact) {
+	time.Sleep(5 * time.Second)
+
+	network.pendingMutex.Lock()
+	defer network.pendingMutex.Unlock()
+
+	//Check if request is pending
+	if _, exists := network.pendingRequests[rpcID]; exists {
+		delete(network.pendingRequests, rpcID)
+		//Send empty result to indicate timeout
+		select {
+		case resultChan <- nil:
+		default:
+		}
+		close(resultChan)
+	}
+}
+
 func (network *Network) SendFindDataMessage(hash string) {
-	// TODO: Implement with proper message format
+	// 1. Convert hash to KademliaID
+	// 2. Use iterative lookup to find data
+	// 3. Implement handleFindValue()
+	// 4. Implement handleFindValueResponse()
 }
 
 func (network *Network) SendStoreMessage(data []byte) {
-	// TODO: Implement with proper message format
-}
-
-// Think we need this
-func NewNetwork(me *Contact, rt *RoutingTable) *Network {
-	// TODO: open UDP socket, set fields, start receiver goroutine, etc.
-	return &Network{
-		RoutingTable: rt,
-		// conn: ..., etc.
-	}
+	// 1. Hash data to get storage key
+	// 2. Find k closest nodes to hash
+	// 3. Send STORE messages to them
+	// 4. Implement handleStore()
 }
