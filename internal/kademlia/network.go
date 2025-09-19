@@ -241,7 +241,7 @@ func (network *Network) SendPingMessage(contact *Contact) error {
 }
 
 // SendFindContactMessage sends a FIND_NODE message to find contacts close to target ID
-func (network *Network) SendFindContactMessage(contact *Contact, targetID *KademliaID) error {
+func (network *Network) SendFindContactMessage(contact *Contact, targetID *KademliaID) (<-chan []Contact, error) {
 	// Generate 160-bit RPC ID
 	rpcID := NewRandomKademliaID()
 
@@ -256,21 +256,21 @@ func (network *Network) SendFindContactMessage(contact *Contact, targetID *Kadem
 	// Serialize and send message (similar to SendPingMessage)
 	msgData, err := network.serializeMessage(msg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	udpAddr, err := net.ResolveUDPAddr("udp", contact.Address)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	_, err = network.conn.WriteToUDP(msgData, udpAddr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	log.Printf("Sent FIND_NODE to %s (RPC ID: %s)\n", contact.Address, targetID.String())
-	return nil
+	return nil, nil
 }
 
 func (network *Network) SendFindDataMessage(hash string) {
@@ -279,4 +279,13 @@ func (network *Network) SendFindDataMessage(hash string) {
 
 func (network *Network) SendStoreMessage(data []byte) {
 	// TODO: Implement with proper message format
+}
+
+// Think we need this
+func NewNetwork(me *Contact, rt *RoutingTable) *Network {
+	// TODO: open UDP socket, set fields, start receiver goroutine, etc.
+	return &Network{
+		RoutingTable: rt,
+		// conn: ..., etc.
+	}
 }

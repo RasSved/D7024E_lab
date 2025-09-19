@@ -15,6 +15,7 @@ const (
 type Kademlia struct {
 	routingTable *RoutingTable
 	store        map[string][]byte
+	network      *Network
 }
 
 // ---------------------------- Server Side Logic ----------------------------------------------------------------
@@ -59,74 +60,98 @@ func (kademlia *Kademlia) iterativeLookupContact(target *Contact) []Contact {
 	}
 	targetID := target.ID
 
-	// 1. Find our k closest
+	// 1) Start with our k closest
 	shortlist := kademlia.routingTable.FindClosestContacts(targetID, k)
+	for i := range shortlist {
+		shortlist[i].CalcDistance(targetID)
+	}
+	sort.Slice(shortlist, func(i, j int) bool { return shortlist[i].Less(&shortlist[j]) })
 
 	queried := make(map[string]bool, len(shortlist))
 
 	for {
-		// 2. Pick alpha closest unquired
+		// 2) Pick α closest unqueried
 		batch := make([]Contact, 0, a)
-		for _, contact := range shortlist {
-			if contact.ID == nil {
+		for _, c := range shortlist {
+			if c.ID == nil {
 				continue
 			}
-			if !queried[contact.ID.String()] {
-				batch = append(batch, contact)
+			if c.ID.String() == kademlia.routingTable.me.ID.String() {
+				continue
+			} // skip self
+			if !queried[c.ID.String()] {
+				batch = append(batch, c)
 				if len(batch) == a {
 					break
 				}
 			}
 		}
-		if len(batch) == 0 {
-			break
+		if len(batch) == 0 || kClosestAllQueried(shortlist, queried, k) {
+			return shortlist
 		}
 
-		// 3. For each alpha picked send one RPC
-		type res struct{ contacts []Contact }
+		// 3) Fire all α queries in parallel
+		type res struct {
+			from  Contact
+			nodes []Contact
+		}
 		results := make(chan res, len(batch))
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
-
-		for _, to := range batch {
-			to := to
-			queried[to.ID.String()] = true
+		for _, peer := range batch {
+			p := peer // capture
+			ch, err := kademlia.network.SendFindContactMessage(&p, targetID)
+			if err != nil {
+				// mark as queried anyway to avoid retry-looping the bad peer
+				queried[p.ID.String()] = true
+				continue
+			}
 			go func() {
-				cs, _ := kademlia.SendFindContactMessage(ctx, &to, targetID) // From network.go
-				results <- res{contacts: cs}
+				select {
+				case nodes, ok := <-ch:
+					if ok {
+						results <- res{from: p, nodes: nodes}
+					} else {
+						results <- res{from: p, nodes: nil}
+					}
+				case <-ctx.Done():
+					results <- res{from: p, nodes: nil}
+				}
 			}()
 		}
 
-		// 5. Merge repelies
+		// 4) Collect and merge
 		progress := false
 		for i := 0; i < len(batch); i++ {
 			select {
 			case r := <-results:
-				if added := mergeKeepBestKNoSort(&shortlist, r.contacts, k, func(c *Contact) {
-					c.CalcDistance(targetID)
-				}); added {
-					progress = true
+				if r.from.ID != nil {
+					queried[r.from.ID.String()] = true
+				}
+				if len(r.nodes) > 0 {
+					// compute distance and merge
+					for i := range r.nodes {
+						r.nodes[i].CalcDistance(targetID)
+					}
+					if mergeKeepBestKNoSort(&shortlist, r.nodes, k, func(c *Contact) {
+						c.CalcDistance(targetID)
+					}) {
+						progress = true
+					}
 				}
 			case <-ctx.Done():
+				// timeout -> no nodes merged for this response
 			}
 		}
 		cancel()
 
-		// 5. Stop when no closer are found or all nodes are queried
+		// 5) Sort and decide whether to continue
 		if progress {
-			sort.Slice(shortlist, func(i, j int) bool {
-				return shortlist[i].Less(&shortlist[j])
-			})
-
-			if len(shortlist) > k {
-				shortlist = shortlist[:k]
-			}
+			sort.Slice(shortlist, func(i, j int) bool { return shortlist[i].Less(&shortlist[j]) })
+			continue
 		}
-
-		if !progress || kClosestAllQueried(shortlist, queried, k) {
-			break
-		}
+		// no closer nodes found -> done
+		return shortlist
 	}
-	return shortlist
 }
 
 func mergeKeepBestKNoSort(a *[]Contact, b []Contact, ksize int, distFn func(*Contact)) bool {
