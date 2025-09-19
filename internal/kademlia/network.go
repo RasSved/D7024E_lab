@@ -465,14 +465,193 @@ func (network *Network) startAsyncTimeout(rpcID string, resultChan chan []Contac
 *
  */
 
-func (network *Network) SendFindDataMessage(hash string) {
+// SendFindDataMessage retrieves data form the Kademlia network by its hash
+func (network *Network) SendFindDataMessage(hash string) ([]byte, error) {
 	// 1. Convert hash to KademliaID
-	// 2. Use iterative lookup to find data
-	// 3. Implement handleFindValue()
-	// 4. Implement handleFindValueResponse()
+	keyID := NewKademliaID(hash)
+
+	if keyID == nil {
+		return nil, errors.New("invalid hash format")
+	}
+	log.Printf("Looking up data with hash: %s\n", hash)
+
+	// 2. Check if we have the data locally
+	network.dataMutex.RLock()
+	if data, exists := network.dataStore[hash]; exists {
+		network.dataMutex.RUnlock()
+		log.Printf("Found data locally for hash %s\n", hash)
+		return data, nil
+	}
+	network.dataMutex.RUnlock()
+
+	// 3. Use iterative lookup to find the data in the network, simple version
+	closestNodes := network.RoutingTable.FindClosestContacts(keyID, 3) // Ask α=3 nodes
+	if len(closestNodes) == 0 {
+		return nil, errors.New("no nodes available for lookup")
+	}
+
+	// 4. Send FIND_VALUE requests to closest nodes
+	for _, contact := range closestNodes {
+		data, err := network.sendFindValueToNode(keyID, &contact)
+		if err != nil {
+			log.Printf("Error querying node %s: %v\n", contact.Address, err)
+			continue
+		}
+		if data != nil {
+			log.Printf("Found data for hash %s on node %s\n", hash, contact.Address)
+			return data, nil
+		}
+	}
+	return nil, errors.New("data not found in the network")
+}
+
+// sendFindValueToNode sends a FIND_VALUE message to a specific node
+func (network *Network) sendFindValueToNode(keyID *KademliaID, target *Contact) ([]byte, error) {
+	// Generate 160-bit RPC ID
+	rpcID := NewRandomKademliaID()
+
+	// Create response channel
+	respChan := make(chan Message, 1)
+
+	// Store pending request
+	network.pendingMutex.Lock()
+	network.pendingRequests[rpcID.String()] = &PendingRequest{
+		Timestamp:    time.Now(),
+		ResponseChan: respChan,
+		TargetID:     keyID,
+	}
+	network.pendingMutex.Unlock()
+
+	// Create FIND_VALUE message
+	msg := Message{
+		RPCID:  rpcID,
+		Type:   FIND_VALUE,
+		Sender: network.RoutingTable.me,
+		Target: keyID, // Key to find
+	}
+
+	// Serialize message
+	msgData, err := network.serializeMessage(msg)
+	if err != nil {
+		network.pendingMutex.Lock()
+		delete(network.pendingRequests, rpcID.String())
+		network.pendingMutex.Unlock()
+		return nil, err
+	}
+
+	// Resolve target address
+	udpAddr, err := net.ResolveUDPAddr("udp", target.Address)
+	if err != nil {
+		network.pendingMutex.Lock()
+		delete(network.pendingRequests, rpcID.String())
+		network.pendingMutex.Unlock()
+		return nil, err
+	}
+
+	// Send FIND_VALUE message
+	_, err = network.conn.WriteToUDP(msgData, udpAddr)
+	if err != nil {
+		network.pendingMutex.Lock()
+		delete(network.pendingRequests, rpcID.String())
+		network.pendingMutex.Unlock()
+		return nil, err
+	}
+	log.Printf("Sent FIND_VALUE to %s for key %s\n", target.Address, keyID.String())
+
+	// Wait for response with timeout
+	select {
+	case response := <-respChan:
+		if response.Data != nil {
+			return response.Data, nil // Found the data
+		}
+		return nil, errors.New("node does not have the requesteddata")
+	case <-time.After(5 * time.Second):
+		network.pendingMutex.Lock()
+		delete(network.pendingRequests, rpcID.String())
+		network.pendingMutex.Unlock()
+		return nil, errors.New("FIND_VALUE request timeout")
+	}
+}
+
+// handleFindValue processes incoming FIND_VALUE requests
+func (network *Network) handleFindValue(msg Message, addr *net.UDPAddr) {
+	if msg.Target == nil {
+		log.Printf("Invalid FIND_VALUE message: missing target")
+		return
+	}
+	log.Printf("Received FIND_VALUE request for key %s from %s\n", msg.Target.String(), msg.Sender.Address)
+
+	// Check if we have data locally
+	network.dataMutex.RLock()
+	data, exists := network.dataStore[msg.Target.String()]
+	network.dataMutex.RUnlock()
+
+	var response Message
+	if exists {
+		// We have the data, send it back
+		response = Message{
+			RPCID:  msg.RPCID,
+			Type:   FIND_VALUE_RESPONSE,
+			Sender: network.RoutingTable.me,
+			Data:   data, // the actual data
+		}
+		log.Printf("Returning data for key %s (%d bytes)\n", msg.Target.String(), len(data))
+	} else {
+		// No data, return closest nodes
+		closestNodes := network.RoutingTable.FindClosestContacts(msg.Target, 20) // k=20
+		response = Message{
+			RPCID:  msg.RPCID,
+			Type:   FIND_VALUE_RESPONSE,
+			Sender: network.RoutingTable.me,
+			Nodes:  closestNodes,
+		}
+		log.Printf("Returning %d closest nodes for key %s\n", len(closestNodes), msg.Target.String())
+	}
+
+	// Send response
+	responseData, err := network.serializeMessage(response)
+	if err != nil {
+		log.Printf("Error serializing FIND_VALUE_RESPONSE: %v\n", err)
+		return
+	}
+
+	_, err = network.conn.WriteToUDP(responseData, addr)
+	if err != nil {
+		log.Printf("Error sending FIND_VALUE_RESPONSE: %v\n", err)
+	}
+
+	// Update routing table with senders info
+	network.RoutingTable.AddContact(msg.Sender)
+}
+
+// handleFindValueResponse processes incoming FIND_VALUE responses
+func (network *Network) handleFindValueResponse(msg Message, addr *net.UDPAddr) {
+	log.Printf("Received FIND_VALUE_RESPONSE from %s (RPC ID: %s)\n", msg.Sender.Address, msg.RPCID.String())
+
+	// 1. Check if this is a response to a pending request
+	network.pendingMutex.Lock()
+	if pendingReq, exists := network.pendingRequests[msg.RPCID.String()]; exists {
+		// Send response to waiting goroutine
+		pendingReq.ResponseChan <- msg
+		delete(network.pendingRequests, msg.RPCID.String())
+		network.pendingMutex.Unlock()
+		log.Printf("Delivered FIND_VALUE response for RPC ID %s\n", msg.RPCID.String())
+	} else {
+		network.pendingMutex.Unlock()
+		log.Printf("Received unsolicited FIND_VALUE_RESPONSE from %s\n", msg.Sender.Address)
+	}
+
+	//Always update senders contact info
+	network.RoutingTable.AddContact(msg.Sender)
 }
 
 /*
+*
+*
+*
+*
+*
+*
 *
 *
 *
