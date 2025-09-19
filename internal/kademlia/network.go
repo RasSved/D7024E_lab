@@ -2,10 +2,12 @@ package kademlia
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type MessageType byte
@@ -20,6 +22,12 @@ const (
 	FIND_VALUE_RESPONSE
 )
 
+type PendingRequest struct {
+	Timestamp    time.Time
+	ResponseChan chan Message
+	TargetID     *KademliaID
+}
+
 // Message represents a Kademlia RPC message with 160-bit RPC ID
 type Message struct {
 	RPCID  *KademliaID `json:"rpcid"`  // 160-bit RPC identifier
@@ -32,14 +40,16 @@ type Message struct {
 
 // Network represents a Kademlia network node with IDP communication capabilities
 type Network struct {
-	nodeID       *KademliaID
-	address      string
-	conn         *net.UDPConn
-	RoutingTable *RoutingTable
-	dataStore    map[string][]byte
-	dataMutex    sync.RWMutex
-	rpcMutex     sync.Mutex
-	rpcCallbacks map[string]chan RPCResponse // For handling async responses
+	nodeID          *KademliaID
+	address         string
+	conn            *net.UDPConn
+	RoutingTable    *RoutingTable
+	dataStore       map[string][]byte
+	dataMutex       sync.RWMutex
+	rpcMutex        sync.Mutex
+	rpcCallbacks    map[string]chan RPCResponse // For handling async responses
+	pendingRequests map[string]*PendingRequest
+	pendingMutex    sync.Mutex
 }
 
 // RPCResponse represents a response from a remote procedure call
@@ -74,12 +84,13 @@ func Listen(ip string, port int) *Network {
 
 	// Initialize Network instance with all required components
 	network := &Network{
-		nodeID:       nodeID,
-		address:      addrStr,
-		conn:         conn,
-		RoutingTable: NewRoutingTable(myContact),
-		dataStore:    make(map[string][]byte),
-		rpcCallbacks: make(map[string]chan RPCResponse),
+		nodeID:          nodeID,
+		address:         addrStr,
+		conn:            conn,
+		RoutingTable:    NewRoutingTable(myContact),
+		dataStore:       make(map[string][]byte),
+		rpcCallbacks:    make(map[string]chan RPCResponse),
+		pendingRequests: make(map[string]*PendingRequest),
 	}
 
 	// Start background listener for incoming messages
@@ -138,6 +149,12 @@ func (network *Network) handleMessage(data []byte, addr *net.UDPAddr) {
 		network.handleFindNode(msg, addr)
 	case FIND_NODE_RESPONSE:
 		network.handleFindNodeResponse(msg, addr)
+	case STORE:
+		network.handleStore(msg, addr)
+	case FIND_VALUE:
+		network.handleFindValue(msg, addr)
+	case FIND_VALUE_RESPONSE:
+		network.handleFindValueResponse(msg, addr)
 	default:
 		log.Printf("Received unknown message type: %d\n", msg.Type)
 	}
@@ -174,7 +191,7 @@ func (network *Network) handlePong(msg Message, addr *net.UDPAddr) {
 
 // handleFindNode processes FIND_NODE requests
 func (network *Network) handleFindNode(msg Message, addr *net.UDPAddr) {
-	log.Printf("Recieved FIND_NODE for target %s from %s\n", msg.Target.String(), msg.Sender.Address)
+	log.Printf("Received FIND_NODE for target %s from %s\n", msg.Target.String(), msg.Sender.Address)
 
 	// Find closest nodes to the target
 	closestNodes := network.RoutingTable.FindClosestContacts(msg.Target, 20) // k=20
@@ -199,11 +216,29 @@ func (network *Network) handleFindNode(msg Message, addr *net.UDPAddr) {
 	}
 }
 
-// handleFindNodeResponse processes FIND_NODE repsonnses
+// handleFindNodeResponse processes FIND_NODE responses
 func (network *Network) handleFindNodeResponse(msg Message, addr *net.UDPAddr) {
-	log.Printf("Recieved FIND_NODE_RESPONSE with %d nodes from %s\n", len(msg.Nodes), msg.Sender.Address)
-	// TODO: Process the recieved nodes and update routing table
-	// 1. Add the recieved nodes to routing table
+	log.Printf("Received FIND_NODE_RESPONSE with %d nodes from %s (RPC ID: %s)\n", len(msg.Nodes), msg.Sender.Address, msg.RPCID.String())
+
+	// 1. Check if this is a response to a pending request
+	network.pendingMutex.Lock()
+	if pendingReq, exists := network.pendingRequests[msg.RPCID.String()]; exists {
+		// Send response to waiting goroutine
+		pendingReq.ResponseChan <- msg
+		delete(network.pendingRequests, msg.RPCID.String())
+		network.pendingMutex.Unlock()
+
+		log.Printf("Found pending request for RPC ID %s - delivered response\n", msg.RPCID.String())
+	} else {
+		network.pendingMutex.Unlock()
+		// IF no pending request, still process nodes for routing table
+		for _, contact := range msg.Nodes {
+			network.RoutingTable.AddContact(contact)
+		}
+		log.Printf("Added %d contacts from unsolicited FIND_NODE_RESPONSE\n", len(msg.Nodes))
+	}
+	//Always update senders contact info
+	network.RoutingTable.AddContact(msg.Sender)
 }
 
 // SendPingMessage sends a PING message to the specified contact with 160-bit RPC ID
@@ -211,7 +246,7 @@ func (network *Network) SendPingMessage(contact *Contact) error {
 	// Generate 160-bit RPC ID
 	rpcID := NewRandomKademliaID()
 
-	// Create PING message wit hRPC ID
+	// Create PING message with RPC ID
 	msg := Message{
 		RPCID:  rpcID, //160-bit RPC identifier
 		Type:   PING,
@@ -245,6 +280,18 @@ func (network *Network) SendFindContactMessage(contact *Contact, targetID *Kadem
 	// Generate 160-bit RPC ID
 	rpcID := NewRandomKademliaID()
 
+	// Create response channel
+	respChan := make(chan Message, 1)
+
+	// Store pending request
+	network.pendingMutex.Lock()
+	network.pendingRequests[rpcID.String()] = &PendingRequest{
+		Timestamp:    time.Now(),
+		ResponseChan: respChan,
+		TargetID:     targetID,
+	}
+	network.pendingMutex.Unlock()
+
 	// Create FIND_NODE message
 	msg := Message{
 		RPCID:  rpcID, // 160-bit RPC identifier
@@ -256,21 +303,40 @@ func (network *Network) SendFindContactMessage(contact *Contact, targetID *Kadem
 	// Serialize and send message (similar to SendPingMessage)
 	msgData, err := network.serializeMessage(msg)
 	if err != nil {
+		network.pendingMutex.Lock()
+		delete(network.pendingRequests, rpcID.String())
+		network.pendingMutex.Unlock()
 		return nil, err
 	}
 
 	udpAddr, err := net.ResolveUDPAddr("udp", contact.Address)
 	if err != nil {
+		network.pendingMutex.Lock()
+		delete(network.pendingRequests, rpcID.String())
+		network.pendingMutex.Unlock()
 		return nil, err
 	}
 
 	_, err = network.conn.WriteToUDP(msgData, udpAddr)
 	if err != nil {
+		network.pendingMutex.Lock()
+		delete(network.pendingRequests, rpcID.String())
+		network.pendingMutex.Unlock()
 		return nil, err
 	}
 
-	log.Printf("Sent FIND_NODE to %s (RPC ID: %s)\n", contact.Address, targetID.String())
-	return nil, nil
+	log.Printf("Sent FIND_NODE to %s for target %s (RPC ID: %s)\n", contact.Address, targetID.String(), rpcID.String())
+
+	//Wait for response with timeout
+	select {
+	case response := <-respChan:
+		return response.Nodes, nil
+	case <-time.After(5 * time.Second):
+		network.pendingMutex.Lock()
+		delete(network.pendingRequests, rpcID.String())
+		network.pendingMutex.Unlock()
+		return nil, errors.New("FIND_NODE request timeout")
+	}
 }
 
 func (network *Network) SendFindDataMessage(hash string) {
