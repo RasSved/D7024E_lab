@@ -1,6 +1,8 @@
 package kademlia
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log"
@@ -59,6 +61,19 @@ type RPCResponse struct {
 	Payload     []byte
 	Error       error
 }
+
+/*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+ */
 
 // Listen creates and starts a Network instance listening on the specified IP and port
 func Listen(ip string, port int) *Network {
@@ -282,6 +297,19 @@ func (network *Network) SendPingMessage(contact *Contact) error {
 	return nil
 }
 
+/*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+ */
+
 // SendFindContactMessage sends a FIND_NODE message to find contacts close to target ID
 func (network *Network) SendFindContactMessage(contact *Contact, targetID *KademliaID) ([]Contact, error) {
 	// Generate 160-bit RPC ID
@@ -424,6 +452,19 @@ func (network *Network) startAsyncTimeout(rpcID string, resultChan chan []Contac
 	}
 }
 
+/*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+ */
+
 func (network *Network) SendFindDataMessage(hash string) {
 	// 1. Convert hash to KademliaID
 	// 2. Use iterative lookup to find data
@@ -431,9 +472,121 @@ func (network *Network) SendFindDataMessage(hash string) {
 	// 4. Implement handleFindValueResponse()
 }
 
-func (network *Network) SendStoreMessage(data []byte) {
-	// 1. Hash data to get storage key
+/*
+*
+*
+*
+*
+ */
+
+func (network *Network) SendStoreMessage(data []byte) error {
+	// 1. Hash data to get storage key 160-bit
+	hash := network.hashData(data)
+	keyID := NewKademliaID(hash)
+	log.Printf("Storing data with hash %s\n", hash)
+
 	// 2. Find k closest nodes to hash
-	// 3. Send STORE messages to them
-	// 4. Implement handleStore()
+	closestNodes := network.RoutingTable.FindClosestContacts(keyID, 20) // k=20
+	if len(closestNodes) == 0 {
+		return errors.New("no nodes available for storage")
+	}
+
+	// 3. Send STORE messages to all k closest nodes
+	var wg sync.WaitGroup
+	errorsChan := make(chan error, len(closestNodes))
+
+	for _, contact := range closestNodes {
+		wg.Add(1)
+		go func(target Contact) {
+			defer wg.Done()
+
+			err := network.sendStoreToNode(data, keyID, &target)
+			if err != nil {
+				errorsChan <- err
+			}
+		}(contact)
+	}
+
+	// Wait for all store operations to complete
+	wg.Wait()
+	close(errorsChan)
+
+	//Check if any errors occurred
+	var storeErrors []error
+	for err := range errorsChan {
+		storeErrors = append(storeErrors, err)
+	}
+
+	if len(storeErrors) > 0 {
+		log.Printf("Store completed with %d errors out of %d nodes\n", len(storeErrors), len(closestNodes))
+	}
+
+	log.Printf("Successfully stored data on %d nodes\n", len(closestNodes)-len(storeErrors))
+
+	return nil
+}
+
+// sendStoreToNode sends a STORE message to a specific node
+func (network *Network) sendStoreToNode(data []byte, keyID *KademliaID, target *Contact) error {
+	// Generate 160-bit RPC ID
+	rpcID := NewRandomKademliaID()
+
+	// Create STORE message
+	msg := Message{
+		RPCID:  rpcID,
+		Type:   STORE,
+		Sender: network.RoutingTable.me,
+		Target: keyID, //hash key where data is stored
+		Data:   data,  //The actual data to store
+	}
+
+	// Serialize message
+	msgData, err := network.serializeMessage(msg)
+	if err != nil {
+		return err
+	}
+
+	// Resolve target address
+	udpAddr, err := net.ResolveUDPAddr("udp", target.Address)
+	if err != nil {
+		return err
+	}
+
+	// Send STORE message via UDP
+	_, err = network.conn.WriteToUDP(msgData, udpAddr)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Sent STORE request to %s for key %s\n", target.Address, keyID.String())
+	return nil
+}
+
+// hashData creates a SHA-1 hash of the data (160-bit)
+func (network *Network) hashData(data []byte) string {
+	// Creating a simple placeholder
+
+	hasher := sha1.New()
+	hasher.Write(data)
+	return hex.EncodeToString(hasher.Sum(nil))
+
+}
+
+// handleStore processes incoming STORE requests
+func (network *Network) handleStore(msg Message, addr *net.UDPAddr) {
+	if msg.Target == nil || msg.Data == nil {
+		log.Printf("Invalid STORE message: missing target or data")
+		return
+	}
+
+	log.Printf("Received STORE request for key %s from %s\n", msg.Target.String(), msg.Sender.Address)
+
+	// Store data locally
+	network.dataMutex.Lock()
+	network.dataStore[msg.Target.String()] = msg.Data
+	network.dataMutex.Unlock()
+
+	// Update routing table with senders info
+	network.RoutingTable.AddContact(msg.Sender)
+	log.Printf("Stored data for key %s (%d bytes)\n", msg.Target.String(), len(msg.Data))
 }
