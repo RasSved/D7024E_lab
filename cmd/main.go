@@ -82,6 +82,6 @@ import (
 func main() {
 	root := cli.NewRootCmd() // no node passed in; Cobra will build it
 	if err := root.Execute(); err != nil {
-		log.Fatal(err)
+		log.Fatal(err) //If command execution fails, it logs the error and exits
 	}
 }
