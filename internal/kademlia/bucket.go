@@ -7,7 +7,7 @@ import (
 // bucket definition
 // contains a List
 type bucket struct {
-	list *list.List
+	list *list.List //bucket is a linked list
 }
 
 // newBucket returns a new instance of a bucket
