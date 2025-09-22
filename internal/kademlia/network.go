@@ -231,23 +231,19 @@ func (network *Network) handlePing(msg Message, addr *net.UDPAddr) {
 	}
 }
 
-/*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
- */
-
-// handlePong processes PONG responses
+// Processes PONG responses and updates routing table
 func (network *Network) handlePong(msg Message, addr *net.UDPAddr) {
 	log.Printf("Received PONG from %s (RPC ID: %s)\n", msg.Sender.Address, msg.RPCID.String())
-	// TODO: Implement response handling for async requests
+
+	// Always update routing table with sender's contact info (main benefit)
+	network.RoutingTable.AddContact(msg.Sender)
+	// Optional clean up ping requests
+	network.pendingMutex.Lock()
+	if _, exists := network.pendingRequests[msg.RPCID.String()]; exists {
+		delete(network.pendingRequests, msg.RPCID.String())
+		log.Printf("Cleaned up pending PING request for RPC ID %s\n", msg.RPCID.String())
+	}
+	network.pendingMutex.Unlock()
 }
 
 /*
@@ -328,7 +324,7 @@ func (network *Network) handleFindNodeResponse(msg Message, addr *net.UDPAddr) {
 	network.RoutingTable.AddContact(msg.Sender)
 }
 
-// Sends a PING message to the specified contact, check if the node is alive and reachable
+// SendPingMessage sends a PING message without waiting for response (fire-and-forget)
 func (network *Network) SendPingMessage(contact *Contact) error {
 	// Generate 160-bit RPC ID
 	rpcID := NewRandomKademliaID()
@@ -340,7 +336,7 @@ func (network *Network) SendPingMessage(contact *Contact) error {
 		Sender: network.RoutingTable.me,
 	}
 
-	//Serialize message
+	// Serialize message
 	msgData, err := network.serializeMessage(msg)
 	if err != nil {
 		return err
@@ -359,7 +355,7 @@ func (network *Network) SendPingMessage(contact *Contact) error {
 	}
 
 	log.Printf("Sent PING to %s (RPC ID: %s)\n", contact.Address, rpcID.String())
-	return nil
+	return nil // Returns immediately - fire-and-forget
 }
 
 /*
