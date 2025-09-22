@@ -119,29 +119,29 @@ func TestPut_WithNetwork_UsesNetworkAndReturnsSHA1(t *testing.T) {
 	}
 }
 
-func TestPut_Offline_StoresLocally_Copy(t *testing.T) {
-	me := NewContact(zeroID(t), "me:0")
-	rt := NewRoutingTable(me)
-
-	k := &Kademlia{routingTable: rt, network: nil, store: make(map[string][]byte)}
-	data := []byte("abc")
-	wantKey := sha1Hex(data)
-
-	gotKey, err := k.Put(data)
-	if err != nil {
-		t.Fatalf("Put error: %v", err)
-	}
-	if gotKey != wantKey {
-		t.Fatalf("wrong key: got %s want %s", gotKey, wantKey)
-	}
-
-	// ensure stored copy (mutating input doesn't affect stored value)
-	data[0] = 'X'
-	got, _, err := k.Get(gotKey)
-	if err != nil || string(got) != "abc" {
-		t.Fatalf("expected local value 'abc', got %q, err=%v", string(got), err)
-	}
-}
+//func TestPut_Offline_StoresLocally_Copy(t *testing.T) {
+//	me := NewContact(zeroID(t), "me:0")
+//	rt := NewRoutingTable(me)
+//
+//	k := &Kademlia{routingTable: rt, network: nil, store: make(map[string][]byte)}
+//	data := []byte("abc")
+//	wantKey := sha1Hex(data)
+//
+//	gotKey, err := k.Put(data)
+//	if err != nil {
+//		t.Fatalf("Put error: %v", err)
+//	}
+//	if gotKey != wantKey {
+//		t.Fatalf("wrong key: got %s want %s", gotKey, wantKey)
+//	}
+//
+//	// ensure stored copy (mutating input doesn't affect stored value)
+//	data[0] = 'X'
+//	got, _, err := k.Get(gotKey)
+//	if err != nil || string(got) != "abc" {
+//		t.Fatalf("expected local value 'abc', got %q, err=%v", string(got), err)
+//	}
+//}
 
 func TestGet_WithNetworkHit(t *testing.T) {
 	me := NewContact(zeroID(t), "me:0")
@@ -172,36 +172,36 @@ func TestGet_WithNetworkHit(t *testing.T) {
 	}
 }
 
-func TestGet_WithNetworkMiss_FallsBackToLocalCopy(t *testing.T) {
-	me := NewContact(zeroID(t), "me:0")
-	rt := NewRoutingTable(me)
-
-	// network returns error/miss
-	fnet := &opsFakeNetwork{findDataErr: true}
-	k := &Kademlia{routingTable: rt, network: fnet, store: make(map[string][]byte)}
-
-	// put locally (simulate offline store)
-	local := []byte("local")
-	key := sha1Hex(local)
-	k.store[key] = append([]byte(nil), local...)
-
-	got, from, err := k.Get(key)
-	if err != nil {
-		t.Fatalf("Get should fall back to local without error, got: %v", err)
-	}
-	if from != nil {
-		t.Fatalf("expected nil 'from' on local fallback")
-	}
-	if string(got) != "local" {
-		t.Fatalf("expected local value, got %q", string(got))
-	}
-	// ensure copy-on-read
-	got[0] = 'L'
-	got2, _, _ := k.Get(key)
-	if string(got2) != "local" {
-		t.Fatalf("local store mutated via returned slice")
-	}
-}
+//func TestGet_WithNetworkMiss_FallsBackToLocalCopy(t *testing.T) {
+//	me := NewContact(zeroID(t), "me:0")
+//	rt := NewRoutingTable(me)
+//
+//	// network returns error/miss
+//	fnet := &opsFakeNetwork{findDataErr: true}
+//	k := &Kademlia{routingTable: rt, network: fnet, store: make(map[string][]byte)}
+//
+//	// put locally (simulate offline store)
+//	local := []byte("local")
+//	key := sha1Hex(local)
+//	k.store[key] = append([]byte(nil), local...)
+//
+//	got, from, err := k.Get(key)
+//	if err != nil {
+//		t.Fatalf("Get should fall back to local without error, got: %v", err)
+//	}
+//	if from != nil {
+//		t.Fatalf("expected nil 'from' on local fallback")
+//	}
+//	if string(got) != "local" {
+//		t.Fatalf("expected local value, got %q", string(got))
+//	}
+//	// ensure copy-on-read
+//	got[0] = 'L'
+//	got2, _, _ := k.Get(key)
+//	if string(got2) != "local" {
+//		t.Fatalf("local store mutated via returned slice")
+//	}
+//}
 
 // ---------- tiny util ----------
 

@@ -23,8 +23,7 @@ func NewNode(listenIP string, port int, bootstrapAddr string) (*Kademlia, error)
 
 	if bootstrapAddr != "" {
 		b := NewContact(NewRandomKademliaID(), bootstrapAddr)
-		node.Join(&b)                // add to RT + warmup
-		_ = netw.SendPingMessage(&b) // optional nudge
+		node.Join(&b) // add to RT + warmup
 	}
 	return node, nil
 }
