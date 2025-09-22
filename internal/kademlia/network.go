@@ -77,18 +77,18 @@ type RPCResponse struct {
 *
  */
 
-// Listen creates and starts a Network instance listening on the specified IP and port
+// Creates and Starts a Network instance listening on the specified IP and port
 func Listen(ip string, port int) *Network {
 	reqAddr := net.JoinHostPort(ip, strconv.Itoa(port))
 
-	// Set up UDP connection
+	// Sets up UDP connection
 	udpAddr, err := net.ResolveUDPAddr("udp", reqAddr)
 	if err != nil {
 		log.Fatal("Error resolving UDP address:", err)
 	}
 	log.Printf("Resolved UDP address: %s\n", udpAddr.String())
 
-	// Create UDP listener
+	// Creates a UDP listener
 	conn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
 		log.Fatal("Error listening on UDP:", err)
@@ -115,33 +115,34 @@ func Listen(ip string, port int) *Network {
 		done:            make(chan struct{}),
 	}
 
-	// Start background listener for incoming messages
+	// Starts background listener for incoming messages
 	go network.listenLoop()
-
+	// Returns a ready to use Network instance
 	return network
 }
 
+// Alternative way to create a Network instance
 func NewNetwork(ip string, port int) *Network {
 	return Listen(ip, port)
 }
 
-// serializeMessage converts a Message struct to JSON bytes for transmission
+// Uses JSON encoding to create a byte array that can be sent over UDP
 func (network *Network) serializeMessage(msg Message) ([]byte, error) {
 	return json.Marshal(msg)
 }
 
-// deserializeMessage converts JSON bytes back to Message struct
+// Uses JSON decoding to parse network data into structured format
 func (network *Network) deserializeMessage(data []byte) (Message, error) {
 	var msg Message
 	err := json.Unmarshal(data, &msg)
 	return msg, err
 }
 
-// listenLoop continuously listens for incoming UDP messages
+// Continuously listens for incoming UDP messages, handles shutdowns and processes eaach message
 func (network *Network) listenLoop() {
 	buffer := make([]byte, 8192)
 	for {
-		// short deadline so we can poll for shutdown
+		// Sets short deadline so we can check for shutdown
 		_ = network.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 
 		n, addr, err := network.conn.ReadFromUDP(buffer)
@@ -165,26 +166,27 @@ func (network *Network) listenLoop() {
 			continue
 		}
 
-		// copy the bytes before handing to a goroutine
+		// copy message data to avoid corruption
 		pkt := make([]byte, n)
 		copy(pkt, buffer[:n])
+		// goroutine to process each message concurrently
 		go network.handleMessage(pkt, addr)
 	}
 }
 
-// handleMessage processes incoming messages based on their type
+// Routes incoming messages to appropriate handlers based on type
 func (network *Network) handleMessage(data []byte, addr *net.UDPAddr) {
-	// Parse the message using proper deserialization
+	// Deserializes raw bytes into Message struct
 	msg, err := network.deserializeMessage(data)
 	if err != nil {
 		log.Printf("Error deserializing message: %v\n", err)
 		return
 	}
 
-	// Update routing table with senders contact info
+	// Updates routing table with senders contact info
 	network.RoutingTable.AddContact(msg.Sender)
 
-	// Handle different message types
+	// Calls correct handler based on message type
 	switch msg.Type {
 	case PING:
 		network.handlePing(msg, addr)
@@ -205,7 +207,7 @@ func (network *Network) handleMessage(data []byte, addr *net.UDPAddr) {
 	}
 }
 
-// handlePing processes PING requests and sends PONG responses
+// Processes incoming PING requests and sends PONG responses as confirmation. "Are you there" check
 func (network *Network) handlePing(msg Message, addr *net.UDPAddr) {
 	log.Printf("Received PING from %s (RPC ID: %s)\n", msg.Sender.Address, msg.RPCID.String())
 
@@ -216,6 +218,7 @@ func (network *Network) handlePing(msg Message, addr *net.UDPAddr) {
 		Sender: network.RoutingTable.me,
 	}
 
+	// Serializes the response
 	responseData, err := network.serializeMessage(response)
 	if err != nil {
 		log.Printf("Error serializing PONG response: %v\n", err)
@@ -228,13 +231,39 @@ func (network *Network) handlePing(msg Message, addr *net.UDPAddr) {
 	}
 }
 
+/*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+ */
+
 // handlePong processes PONG responses
 func (network *Network) handlePong(msg Message, addr *net.UDPAddr) {
 	log.Printf("Received PONG from %s (RPC ID: %s)\n", msg.Sender.Address, msg.RPCID.String())
 	// TODO: Implement response handling for async requests
 }
 
-// handleFindNode processes FIND_NODE requests
+/*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+ */
+
+// handleFindNode processes FIND_NODE requests, finds closest nodes and sends them back in response
 func (network *Network) handleFindNode(msg Message, addr *net.UDPAddr) {
 	log.Printf("Received FIND_NODE for target %s from %s\n", msg.Target.String(), msg.Sender.Address)
 
@@ -261,11 +290,11 @@ func (network *Network) handleFindNode(msg Message, addr *net.UDPAddr) {
 	}
 }
 
-// handleFindNodeResponse processes FIND_NODE responses
+// Processes FIND_NODE responses, matches responses to requests
 func (network *Network) handleFindNodeResponse(msg Message, addr *net.UDPAddr) {
 	log.Printf("Received FIND_NODE_RESPONSE with %d nodes from %s (RPC ID: %s)\n", len(msg.Nodes), msg.Sender.Address, msg.RPCID.String())
 
-	// 1. Check if this is a response to a pending request
+	// Check if this is a response to a pending request
 	network.pendingMutex.Lock()
 	if pendingReq, exists := network.pendingRequests[msg.RPCID.String()]; exists {
 		if pendingReq.resultChan != nil {
@@ -299,7 +328,7 @@ func (network *Network) handleFindNodeResponse(msg Message, addr *net.UDPAddr) {
 	network.RoutingTable.AddContact(msg.Sender)
 }
 
-// SendPingMessage sends a PING message to the specified contact with 160-bit RPC ID
+// Sends a PING message to the specified contact, check if the node is alive and reachable
 func (network *Network) SendPingMessage(contact *Contact) error {
 	// Generate 160-bit RPC ID
 	rpcID := NewRandomKademliaID()
@@ -346,7 +375,7 @@ func (network *Network) SendPingMessage(contact *Contact) error {
 *
  */
 
-// SendFindContactMessage sends a FIND_NODE message to find contacts close to target ID
+// Sends a FIND_NODE message to another node to find contacts close to target ID
 func (network *Network) SendFindContactMessage(contact *Contact, targetID *KademliaID) ([]Contact, error) {
 	// Generate 160-bit RPC ID
 	rpcID := NewRandomKademliaID()
@@ -410,7 +439,7 @@ func (network *Network) SendFindContactMessage(contact *Contact, targetID *Kadem
 	}
 }
 
-// SendFindContactMessageAsync sends a FIND_NODE message asynchronously and returns a channel for results
+// Does the same thing as the SendFindContacMessage but does it asynchronously on multiple nodes without waitng for them to finish.
 func (network *Network) SendFindContactMessageAsync(contact *Contact, targetID *KademliaID) (<-chan []Contact, error) {
 	rpcID := NewRandomKademliaID()
 	resultChan := make(chan []Contact, 1)
@@ -469,7 +498,7 @@ func (network *Network) SendFindContactMessageAsync(contact *Contact, targetID *
 
 }
 
-// startAsyncTimeout handles timeout for async requests
+// Handles timeout for async requests, if timed out it cleans up the pending request
 func (network *Network) startAsyncTimeout(rpcID string, resultChan chan []Contact) {
 	time.Sleep(5 * time.Second)
 
@@ -501,7 +530,7 @@ func (network *Network) startAsyncTimeout(rpcID string, resultChan chan []Contac
 *
  */
 
-// SendFindDataMessage retrieves data form the Kademlia network by its hash
+// Retrieves data form the Kademlia network by its hash
 func (network *Network) SendFindDataMessage(hash string) ([]byte, error) {
 	// 1. Convert hash to KademliaID
 	keyID := NewKademliaID(hash)
@@ -541,7 +570,7 @@ func (network *Network) SendFindDataMessage(hash string) ([]byte, error) {
 	return nil, errors.New("data not found in the network")
 }
 
-// sendFindValueToNode sends a FIND_VALUE message to a specific node
+// Sends a FIND_VALUE message to a specific node to try and retrieve data associated with a given key (KademliaID)
 func (network *Network) sendFindValueToNode(keyID *KademliaID, target *Contact) ([]byte, error) {
 	// Generate 160-bit RPC ID
 	rpcID := NewRandomKademliaID()
@@ -609,7 +638,7 @@ func (network *Network) sendFindValueToNode(keyID *KademliaID, target *Contact) 
 	}
 }
 
-// handleFindValue processes incoming FIND_VALUE requests
+// Processes incoming FIND_VALUE requests from other nodes
 func (network *Network) handleFindValue(msg Message, addr *net.UDPAddr) {
 	if msg.Target == nil {
 		log.Printf("Invalid FIND_VALUE message: missing target")
@@ -660,11 +689,11 @@ func (network *Network) handleFindValue(msg Message, addr *net.UDPAddr) {
 	network.RoutingTable.AddContact(msg.Sender)
 }
 
-// handleFindValueResponse processes incoming FIND_VALUE responses
+// Handles FIND_VALUE response messages which are replies to FIND_VALUE
 func (network *Network) handleFindValueResponse(msg Message, addr *net.UDPAddr) {
 	log.Printf("Received FIND_VALUE_RESPONSE from %s (RPC ID: %s)\n", msg.Sender.Address, msg.RPCID.String())
 
-	// 1. Check if this is a response to a pending request
+	// Check if this is a response to a pending request
 	network.pendingMutex.Lock()
 	if pendingReq, exists := network.pendingRequests[msg.RPCID.String()]; exists {
 		// Send response to waiting goroutine
@@ -694,6 +723,7 @@ func (network *Network) handleFindValueResponse(msg Message, addr *net.UDPAddr) 
 *
  */
 
+// Store data in the Kademlia network och skickar till alla 20 noder
 func (network *Network) SendStoreMessage(data []byte) error {
 	// 1. Hash data to get storage key 160-bit
 	hash := network.hashData(data)
@@ -741,7 +771,7 @@ func (network *Network) SendStoreMessage(data []byte) error {
 	return nil
 }
 
-// sendStoreToNode sends a STORE message to a specific node
+// Sends a STORE message to a specific single node
 func (network *Network) sendStoreToNode(data []byte, keyID *KademliaID, target *Contact) error {
 	// Generate 160-bit RPC ID
 	rpcID := NewRandomKademliaID()
@@ -787,7 +817,7 @@ func (network *Network) hashData(data []byte) string {
 
 }
 
-// handleStore processes incoming STORE requests
+// handles and processes incoming STORE requests from other nodes
 func (network *Network) handleStore(msg Message, addr *net.UDPAddr) {
 	if msg.Target == nil || msg.Data == nil {
 		log.Printf("Invalid STORE message: missing target or data")
@@ -806,9 +836,13 @@ func (network *Network) handleStore(msg Message, addr *net.UDPAddr) {
 	log.Printf("Stored data for key %s (%d bytes)\n", msg.Target.String(), len(msg.Data))
 }
 
+// Returns the nodes own KademliaID
 func (n *Network) ID() *KademliaID { return n.nodeID }
+
+// Returns the nodes own network address
 func (n *Network) Address() string { return n.address }
 
+// Shuts down the network node
 func (n *Network) Close() error {
 	select {
 	case <-n.done: // already closed
