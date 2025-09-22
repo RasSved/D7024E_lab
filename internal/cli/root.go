@@ -1,13 +1,13 @@
 package cli
 
 import (
-	"fmt"
+	"fmt" //output
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/RasSved/D7024E_lab/internal/kademlia"
-	"github.com/spf13/cobra"
+	"github.com/RasSved/D7024E_lab/internal/kademlia" //DHT logic
+	"github.com/spf13/cobra" //framework for building CLI commands
 )
 
 var (
@@ -28,10 +28,10 @@ func NewRootCmd() *cobra.Command {
 
 	// Subcommands
 	root.AddCommand(
-		newServeCmd(),
-		newPutCmd(),
-		newGetCmd(),
-		newVersionCmd(),
+		newServeCmd(), //creates the root cobra command kademlia
+		newPutCmd(), //Stores a string in the DHT and creates a hash key for lookup
+		newGetCmd(), //retrives a value from the hash key
+		newVersionCmd(), //shows version
 	)
 	return root
 }
