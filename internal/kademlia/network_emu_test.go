@@ -234,9 +234,9 @@ func newSimNet(t *testing.T, seed int64, numNodes int, dropPct float64, minLat, 
 // We verify iterativeLookupContact still converges to K closest contacts.
 func TestSim_IterativeLookup_ThousandNodes_WithPacketDrop(t *testing.T) {
 	const (
-		numNodes = 1000 // 👈 adjust here
-		drop     = 0.5  // 👈 30% drops; adjust here
-		seed     = 1337
+		numNodes = 1000
+		drop     = 0.5
+		seed     = 1111
 	)
 	sn := newSimNet(t, seed, numNodes, drop, 0, 1*time.Millisecond, k, a)
 
@@ -296,8 +296,8 @@ func TestSim_IterativeLookup_ThousandNodes_WithPacketDrop(t *testing.T) {
 func TestSim_PutGet_ThousandNodes_WithPacketDrop(t *testing.T) {
 	const (
 		numNodes = 1000
-		drop     = 0.5 // e.g., 15% loss
-		seed     = 4242
+		drop     = 0.5
+		seed     = 2222
 	)
 	sn := newSimNet(t, seed, numNodes, drop, 0, 0, k, a)
 
