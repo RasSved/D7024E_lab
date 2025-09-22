@@ -1,19 +1,25 @@
-version: "3.8"
+# docker-compose.yml
 services:
-  kademliaNodes:
-    image: kadlab:latest
-    command: ["kadlab","node","--listen=:4000"]
-    # Publish UDP only if you want to reach from the host; not needed for in-cluster tests:
-    # ports:
-    #   - "4000:4000/udp"
-    deploy:
-      mode: replicated
-      replicas: 1   # ignored by docker compose (non-swarm); used by swarm
-      restart_policy:
-        condition: on-failure
-    networks:
-      - kademlia_network
+  seed:
+    build: .
+    command: ["serve", "--ip", "0.0.0.0", "--port", "4001"]
+    # publish seed UDP to host for optional local debugging
+    ports:
+      - "4001:4001/udp"
+    networks: [kadnet]
+    restart: unless-stopped
+
+  node:
+    build: .
+    # Every container has its own network namespace, so they can reuse port 4001
+    command: ["serve", "--ip", "0.0.0.0", "--port", "4001", "--bootstrap", "seed:4001"]
+    # no need to publish ports for the other nodes; they talk inside the kadnet bridge
+    expose:
+      - "4001/udp"
+    networks: [kadnet]
+    restart: unless-stopped
 
 networks:
-  kademlia_network:
+  kadnet:
+    name: kadnet
     driver: bridge

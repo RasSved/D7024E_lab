@@ -1,8 +1,21 @@
-FROM alpine:3.20
-RUN adduser -D -g '' app && apk add --no-cache ca-certificates tzdata
-USER app
-WORKDIR /home/app
+# ---- build stage ----
+FROM golang:1.23-alpine AS build
+RUN apk add --no-cache git
+WORKDIR /app
 
-COPY bin/kadlab /usr/local/bin/kadlab
-EXPOSE 4000/udp
-CMD ["kadlab", "node", "--listen=:4000"]
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN go build -trimpath -ldflags="-s -w" -o /bin/kademlia ./cmd
+
+# ---- runtime stage ----
+FROM alpine:3.20
+WORKDIR /data
+
+# optional: add bash/netcat for debugging
+RUN apk add --no-cache bash busybox-extras
+
+COPY --from=build /bin/kademlia /bin/kademlia
+
+ENTRYPOINT ["/bin/kademlia"]

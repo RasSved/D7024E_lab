@@ -1,35 +1,66 @@
 package kademlia
 
-// Join: populate RT by looking up your own ID
-func (kademlia *Kademlia) Join(bootstrap *Contact) {
+import (
+	"crypto/sha1"
+	"encoding/hex"
+	"errors"
+)
+
+// Join: add bootstrap (if any) and warm the table by looking up our own ID.
+func (k *Kademlia) Join(bootstrap *Contact) {
 	if bootstrap != nil {
-		kademlia.routingTable.AddContact(*bootstrap)
+		k.routingTable.AddContact(*bootstrap)
+		if k.network != nil {
+			_ = k.network.SendPingMessage(bootstrap) // nudge mutual visibility
+		}
 	}
-	me := &Contact{ID: kademlia.routingTable.me.ID, Address: kademlia.routingTable.me.Address}
-	_ = kademlia.iterativeLookupContact(me) // uses FIND_NODE over the network
+	// Kademlia bootstrap: iterative lookup on our own ID (best-effort)
+	if k.network != nil {
+		me := &Contact{ID: k.routingTable.me.ID, Address: k.routingTable.me.Address}
+		_ = k.iterativeLookupContact(me)
+	}
 }
 
-// PUT: hash -> find k closest -> send STORE to them
-//func (k *Kademlia) Put(data []byte) (string, error) {
-//	sum := sha1.Sum(data)
-//	key := hex.EncodeToString(sum[:])
-//	keyID := NewKademliaID(key)
-//
-//	target := &Contact{ID: keyID}
-//	closest := k.iterativeLookupContact(target) // client-side iterative FIND_NODE
-//
-//	// send STORE to each of the k nodes
-//	for _, c := range closest {
-//		//if err := k.network.SendStoreMessage(&c, key, data); err != nil { // Not yet implemented in network.go
-//		// best-effort; you can count acks if you want
-//		//}
-//	}
-//	return key, nil
-//}
-//
-//// GET: iterative find-value: query peers; if any returns value, stop; else converge like find-node
-//func (k *Kademlia) Get(key string) ([]byte, *Contact, error) {
-//	//keyID := NewKademliaID(key)
-//	// Start with k closest we currently know
-//	// shortlist := k.iterativeFindValue(keyID)
-//}
+// Put: use the network (STORE to K closest); fall back to local when offline.
+func (k *Kademlia) Put(data []byte) (string, error) {
+	// hash must match network.hashData (SHA-1)
+	sum := sha1.Sum(data)
+	key := hex.EncodeToString(sum[:])
+
+	if k.network != nil {
+		if err := k.network.SendStoreMessage(data); err != nil {
+			return "", err
+		}
+		return key, nil
+	}
+
+	// offline fallback
+	k.storeMutex.Lock()
+	if k.store == nil {
+		k.store = make(map[string][]byte)
+	}
+	k.store[key] = append([]byte(nil), data...) // store a copy
+	k.storeMutex.Unlock()
+	return key, nil
+}
+
+// Get: use the network (FIND_VALUE); fall back to local when offline/not found.
+// NOTE: we currently don’t track the “from” node, so we return nil for it.
+func (k *Kademlia) Get(key string) ([]byte, *Contact, error) {
+	if k.network != nil {
+		if data, err := k.network.SendFindDataMessage(key); err == nil && data != nil {
+			return data, nil, nil
+		}
+	}
+
+	// local fallback
+	k.storeMutex.RLock()
+	val, ok := k.store[key]
+	k.storeMutex.RUnlock()
+	if ok {
+		cp := make([]byte, len(val))
+		copy(cp, val)
+		return cp, nil, nil
+	}
+	return nil, nil, errors.New("not found")
+}

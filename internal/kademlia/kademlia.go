@@ -3,6 +3,7 @@ package kademlia
 import (
 	"context"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -15,7 +16,22 @@ const (
 type Kademlia struct {
 	routingTable *RoutingTable
 	store        map[string][]byte
-	network      *Network
+	network      NetworkAPI
+	storeMutex   sync.RWMutex
+}
+
+type NetworkAPI interface {
+	// used by iterativeLookupContact
+	SendFindContactMessageAsync(peer *Contact, target *KademliaID) (<-chan []Contact, error)
+
+	// used by Join/Put/Get
+	SendPingMessage(contact *Contact) error
+	SendStoreMessage(data []byte) error
+	SendFindDataMessage(hash string) ([]byte, error)
+
+	// misc used by Kademlia
+	Address() string
+	Close() error
 }
 
 // ---------------------------- Server Side Logic ----------------------------------------------------------------
@@ -23,44 +39,59 @@ type Kademlia struct {
 // Note: I have not make any test for this so might be wonky but idk looks right
 
 func (kademlia *Kademlia) LookupContact(target *Contact) []Contact { // Server side logic for FIND_NODE
+	if kademlia == nil || kademlia.routingTable == nil || target == nil || target.ID == nil {
+		return nil
+	}
 	contacts := kademlia.routingTable.FindClosestContacts(target.ID, k)
 	return contacts
 }
 
 func (kademlia *Kademlia) LookupData(hash string) ([]byte, []Contact) { // Server side logic for FIND_VALUE
+	// safe read under lock
+	kademlia.storeMutex.RLock()
 	if val, ok := kademlia.store[hash]; ok {
-		return val, nil
+		v := make([]byte, len(val))
+		copy(v, val)
+		kademlia.storeMutex.RUnlock()
+		return v, nil
 	}
+	kademlia.storeMutex.RUnlock()
 
-	KeyID := NewKademliaID(hash)
-	if KeyID == nil {
+	keyID := NewKademliaID(hash)
+	if keyID == nil {
 		return nil, nil
 	}
-
-	closest := kademlia.routingTable.FindClosestContacts(KeyID, k)
+	closest := kademlia.routingTable.FindClosestContacts(keyID, k)
 	return nil, closest
 }
 
 func (kademlia *Kademlia) Store(key string, data []byte) bool { // Server side logic for STORE_VALUE
-	if kademlia.store == nil {
-		kademlia.store = make(map[string][]byte)
+	if data == nil {
+		return false
 	}
 
 	value := make([]byte, len(data))
 	copy(value, data)
+	kademlia.storeMutex.Lock()
+
+	if kademlia.store == nil {
+		kademlia.store = make(map[string][]byte)
+	}
+
 	kademlia.store[key] = value
+	kademlia.storeMutex.Unlock()
 	return true
 }
 
 // ----------------------------- Client Side Logic ------------------------------------------------------------
 
 func (kademlia *Kademlia) iterativeLookupContact(target *Contact) []Contact {
-	if kademlia == nil || kademlia.routingTable == nil || target == nil || target.ID == nil {
+	if kademlia == nil || kademlia.routingTable == nil || kademlia.network == nil || target == nil || target.ID == nil {
 		return nil
 	}
 	targetID := target.ID
 
-	// 1) Start with our k closest
+	// 1) start with our k closest
 	shortlist := kademlia.routingTable.FindClosestContacts(targetID, k)
 	for i := range shortlist {
 		shortlist[i].CalcDistance(targetID)
@@ -70,15 +101,12 @@ func (kademlia *Kademlia) iterativeLookupContact(target *Contact) []Contact {
 	queried := make(map[string]bool, len(shortlist))
 
 	for {
-		// 2) Pick α closest unqueried
+		// 2) pick α closest unqueried
 		batch := make([]Contact, 0, a)
 		for _, c := range shortlist {
-			if c.ID == nil {
+			if c.ID == nil || c.ID.String() == kademlia.routingTable.me.ID.String() {
 				continue
 			}
-			if c.ID.String() == kademlia.routingTable.me.ID.String() {
-				continue
-			} // skip self
 			if !queried[c.ID.String()] {
 				batch = append(batch, c)
 				if len(batch) == a {
@@ -90,21 +118,23 @@ func (kademlia *Kademlia) iterativeLookupContact(target *Contact) []Contact {
 			return shortlist
 		}
 
-		// 3) Fire all α queries in parallel
 		type res struct {
 			from  Contact
 			nodes []Contact
 		}
 		results := make(chan res, len(batch))
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
+
+		// 3) fire only for peers we successfully created a channel for
+		started := 0
 		for _, peer := range batch {
-			p := peer // capture
+			p := peer
 			ch, err := kademlia.network.SendFindContactMessageAsync(&p, targetID)
 			if err != nil {
-				// mark as queried anyway to avoid retry-looping the bad peer
 				queried[p.ID.String()] = true
 				continue
 			}
+			started++
 			go func() {
 				select {
 				case nodes, ok := <-ch:
@@ -119,16 +149,14 @@ func (kademlia *Kademlia) iterativeLookupContact(target *Contact) []Contact {
 			}()
 		}
 
-		// 4) Collect and merge
 		progress := false
-		for i := 0; i < len(batch); i++ {
+		for i := 0; i < started; i++ {
 			select {
 			case r := <-results:
 				if r.from.ID != nil {
 					queried[r.from.ID.String()] = true
 				}
 				if len(r.nodes) > 0 {
-					// compute distance and merge
 					for i := range r.nodes {
 						r.nodes[i].CalcDistance(targetID)
 					}
@@ -139,18 +167,20 @@ func (kademlia *Kademlia) iterativeLookupContact(target *Contact) []Contact {
 					}
 				}
 			case <-ctx.Done():
-				// timeout -> no nodes merged for this response
+				// overall timeout; remaining iterations will hit Done immediately
 			}
 		}
 		cancel()
 
-		// 5) Sort and decide whether to continue
-		if progress {
-			sort.Slice(shortlist, func(i, j int) bool { return shortlist[i].Less(&shortlist[j]) })
-			continue
+		// sort and trim AFTER merging
+		sort.Slice(shortlist, func(i, j int) bool { return shortlist[i].Less(&shortlist[j]) })
+		if len(shortlist) > k {
+			shortlist = shortlist[:k]
 		}
-		// no closer nodes found -> done
-		return shortlist
+
+		if !progress {
+			return shortlist
+		}
 	}
 }
 
@@ -199,4 +229,21 @@ func kClosestAllQueried(shortlist []Contact, queried map[string]bool, ksize int)
 		}
 	}
 	return true
+}
+
+// Expose routing table
+func (k *Kademlia) RoutingTable() *RoutingTable {
+	return k.routingTable
+}
+
+// Expose network
+func (k *Kademlia) Network() NetworkAPI {
+	return k.network
+}
+
+func (k *Kademlia) Address() string {
+	if k.network != nil {
+		return k.network.Address()
+	}
+	return ""
 }

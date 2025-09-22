@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -53,6 +54,7 @@ type Network struct {
 	rpcCallbacks    map[string]chan RPCResponse // For handling async responses
 	pendingRequests map[string]*PendingRequest
 	pendingMutex    sync.Mutex
+	done            chan struct{}
 }
 
 // RPCResponse represents a response from a remote procedure call
@@ -77,10 +79,10 @@ type RPCResponse struct {
 
 // Listen creates and starts a Network instance listening on the specified IP and port
 func Listen(ip string, port int) *Network {
-	addrStr := net.JoinHostPort(ip, strconv.Itoa(port))
+	reqAddr := net.JoinHostPort(ip, strconv.Itoa(port))
 
 	// Set up UDP connection
-	udpAddr, err := net.ResolveUDPAddr("udp", addrStr)
+	udpAddr, err := net.ResolveUDPAddr("udp", reqAddr)
 	if err != nil {
 		log.Fatal("Error resolving UDP address:", err)
 	}
@@ -91,6 +93,9 @@ func Listen(ip string, port int) *Network {
 	if err != nil {
 		log.Fatal("Error listening on UDP:", err)
 	}
+
+	local := conn.LocalAddr().(*net.UDPAddr)
+	addrStr := local.String()
 	log.Printf("Listening on %s\n", addrStr)
 
 	// Create node ID and contact info
@@ -107,12 +112,17 @@ func Listen(ip string, port int) *Network {
 		dataStore:       make(map[string][]byte),
 		rpcCallbacks:    make(map[string]chan RPCResponse),
 		pendingRequests: make(map[string]*PendingRequest),
+		done:            make(chan struct{}),
 	}
 
 	// Start background listener for incoming messages
 	go network.listenLoop()
 
 	return network
+}
+
+func NewNetwork(ip string, port int) *Network {
+	return Listen(ip, port)
 }
 
 // serializeMessage converts a Message struct to JSON bytes for transmission
@@ -129,17 +139,36 @@ func (network *Network) deserializeMessage(data []byte) (Message, error) {
 
 // listenLoop continuously listens for incoming UDP messages
 func (network *Network) listenLoop() {
-	buffer := make([]byte, 8192) //8KB buffer
+	buffer := make([]byte, 8192)
 	for {
-		// Read data from UDP connection
+		// short deadline so we can poll for shutdown
+		_ = network.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+
 		n, addr, err := network.conn.ReadFromUDP(buffer)
 		if err != nil {
+			// deadline: check if we're shutting down
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				select {
+				case <-network.done:
+					return
+				default:
+					continue
+				}
+			}
+			// socket closed: exit quietly
+			if errors.Is(err, net.ErrClosed) ||
+				strings.Contains(strings.ToLower(err.Error()), "use of closed network connection") {
+				return
+			}
+			// other transient errors are still logged once
 			log.Printf("Error reading from UDP: %v\n", err)
 			continue
 		}
-		log.Printf("Received %d bytes from %s\n", n, addr.String())
-		// Handle each message in its own goroutine for concurrency
-		go network.handleMessage(buffer[:n], addr)
+
+		// copy the bytes before handing to a goroutine
+		pkt := make([]byte, n)
+		copy(pkt, buffer[:n])
+		go network.handleMessage(pkt, addr)
 	}
 }
 
@@ -239,18 +268,25 @@ func (network *Network) handleFindNodeResponse(msg Message, addr *net.UDPAddr) {
 	// 1. Check if this is a response to a pending request
 	network.pendingMutex.Lock()
 	if pendingReq, exists := network.pendingRequests[msg.RPCID.String()]; exists {
-		// Send the actual contacts to the result channel
-		select {
-		case pendingReq.resultChan <- msg.Nodes: // send contacts to async caller
-		default: // avoid blocking if channel full
+		if pendingReq.resultChan != nil {
+			select {
+			case pendingReq.resultChan <- msg.Nodes:
+			default:
+			}
+			close(pendingReq.resultChan)
+		}
+		// Deliver to sync response channel if used
+		if pendingReq.ResponseChan != nil {
+			select {
+			case pendingReq.ResponseChan <- msg:
+			default:
+			}
+			close(pendingReq.ResponseChan)
 		}
 
-		// Cleanup
-		close(pendingReq.resultChan)
 		delete(network.pendingRequests, msg.RPCID.String())
 		network.pendingMutex.Unlock()
-
-		log.Printf("Delivered async response for RPC ID %s\n", msg.RPCID.String())
+		log.Printf("Delivered response for RPC ID %s\n", msg.RPCID.String())
 	} else {
 		network.pendingMutex.Unlock()
 		// IF no pending request, still process nodes for routing table
@@ -768,4 +804,18 @@ func (network *Network) handleStore(msg Message, addr *net.UDPAddr) {
 	// Update routing table with senders info
 	network.RoutingTable.AddContact(msg.Sender)
 	log.Printf("Stored data for key %s (%d bytes)\n", msg.Target.String(), len(msg.Data))
+}
+
+func (n *Network) ID() *KademliaID { return n.nodeID }
+func (n *Network) Address() string { return n.address }
+
+func (n *Network) Close() error {
+	select {
+	case <-n.done: // already closed
+		return nil
+	default:
+		close(n.done)
+		// Closing the UDP conn will unblock ReadFromUDP
+		return n.conn.Close()
+	}
 }
