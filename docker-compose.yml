@@ -11,9 +11,7 @@ services:
 
   node:
     build: .
-    # Every container has its own network namespace, so they can reuse port 4001
     command: ["serve", "--ip", "0.0.0.0", "--port", "4001", "--bootstrap", "seed:4001"]
-    # no need to publish ports for the other nodes; they talk inside the kadnet bridge
     expose:
       - "4001/udp"
     networks: [kadnet]

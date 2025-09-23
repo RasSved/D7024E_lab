@@ -42,8 +42,23 @@ type SimNet struct {
 	kSize      int // K for closest nodes (use your constant k)
 	alpha      int // alpha for query fanout (not strictly needed here)
 	dataMutex  sync.RWMutex
+	rngMu      sync.Mutex
 	closeOnce  sync.Once
 	closed     chan struct{}
+}
+
+func (sn *SimNet) randFloat64() float64 {
+	sn.rngMu.Lock()
+	v := sn.rng.Float64()
+	sn.rngMu.Unlock()
+	return v
+}
+
+func (sn *SimNet) randInt63n(n int64) int64 {
+	sn.rngMu.Lock()
+	v := sn.rng.Int63n(n)
+	sn.rngMu.Unlock()
+	return v
 }
 
 // ---- SimNet implements NetworkAPI ----
@@ -140,7 +155,7 @@ func (sn *SimNet) drop() bool {
 	if sn.dropPct <= 0 {
 		return false
 	}
-	return sn.rng.Float64() < sn.dropPct
+	return sn.randFloat64() < sn.dropPct
 }
 
 func (sn *SimNet) sleepOne() {
@@ -150,7 +165,7 @@ func (sn *SimNet) sleepOne() {
 	d := sn.latencyMin
 	if sn.latencyMax > sn.latencyMin {
 		// random in [min, max]
-		d += time.Duration(sn.rng.Int63n(int64(sn.latencyMax - sn.latencyMin + 1)))
+		d += time.Duration(sn.randInt63n(int64(sn.latencyMax - sn.latencyMin + 1)))
 	}
 	select {
 	case <-time.After(d):
